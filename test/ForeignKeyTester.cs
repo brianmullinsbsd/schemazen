@@ -1,4 +1,5 @@
-﻿using NUnit.Framework;
+﻿using System.Linq;
+using NUnit.Framework;
 using SchemaZen.Library.Models;
 
 namespace SchemaZen.Tests {
@@ -51,13 +52,49 @@ namespace SchemaZen.Tests {
 			address.Columns.Find("id").Identity = new Identity(1, 1);
 			address.AddConstraint(new Constraint("PK_Address", "PRIMARY KEY", "id"));
 
-			var fk = new ForeignKey(address, "FK_Address_Person", "personId", person, "id", "", "CASCADE");
+			var fk = new ForeignKey(address, "FK_Address_Person", "personId", person, "id", "",
+				"CASCADE");
 
 			TestHelper.ExecSql(person.ScriptCreate(), "");
 			TestHelper.ExecSql(address.ScriptCreate(), "");
 			TestHelper.ExecSql(fk.ScriptCreate(), "");
 			TestHelper.ExecSql("drop table Address", "");
 			TestHelper.ExecSql("drop table Person", "");
+		}
+
+		[Test]
+		public void TestScriptForeignKeyWithNoName() {
+			var t1 = new Table("dbo", "t1");
+			t1.Columns.Add(new Column("c2", "varchar", 10, false, null));
+			t1.Columns.Add(new Column("c1", "int", false, null));
+			t1.AddConstraint(new Constraint("pk_t1", "PRIMARY KEY", "c1,c2"));
+
+			var t2 = new Table("dbo", "t2");
+			t2.Columns.Add(new Column("c1", "int", false, null));
+			t2.Columns.Add(new Column("c2", "varchar", 10, false, null));
+			t2.Columns.Add(new Column("c3", "int", false, null));
+
+			var fk = new ForeignKey(t2, "fk_ABCDEF", "c3,c2", t1, "c1,c2");
+			fk.IsSystemNamed = true;
+
+			var db = new Database("TESTDB");
+			db.Tables.Add(t1);
+			db.Tables.Add(t2);
+			db.ForeignKeys.Add(fk);
+			db.Connection = TestHelper.GetConnString("TESTDB");
+			db.ExecCreate(true);
+			db.Load();
+
+			Assert.AreEqual(1, db.ForeignKeys.Count);
+
+			var fkCopy = db.ForeignKeys.Single();
+			Assert.AreEqual("c3", fkCopy.Columns[0]);
+			Assert.AreEqual("c2", fkCopy.Columns[1]);
+			Assert.AreEqual("c1", fkCopy.RefColumns[0]);
+			Assert.AreEqual("c2", fkCopy.RefColumns[1]);
+			Assert.IsTrue(fkCopy.IsSystemNamed);
+
+			db.ExecCreate(true);
 		}
 	}
 }
